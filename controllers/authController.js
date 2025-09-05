@@ -3,9 +3,10 @@ const User = require("../models/User.js");
 const { JWT_SECRET, JWT_EXPIRATION } = process.env;
 
 // Generate JWT
-const generateToken = (id) => {
-  return jwt.sign({ id }, JWT_SECRET, {
-    expiresIn: JWT_EXPIRATION || "1h", // fallback if not set
+
+const generateToken = (userId) => {
+  return jwt.sign({ id: userId }, process.env.JWT_SECRET, {
+    expiresIn: "7d",
   });
 };
 
