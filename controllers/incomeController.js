@@ -44,9 +44,6 @@ exports.addIncome = async (req, res) => {
   }
 };
 
-// =======================
-// ✅ Get Incomes Grouped by Date (with pagination + date filter)
-// =======================
 exports.getIncomesByDate = async (req, res) => {
   try {
     const { page = 1, limit = 1, date, tripId } = req.query;
@@ -97,6 +94,7 @@ exports.getIncomesByDate = async (req, res) => {
     return res.status(500).json({ success: false, message: "Server error" });
   }
 };
+
 
 // =======================
 // ✅ Delete Income (secured by userId)
