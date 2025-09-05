@@ -62,14 +62,14 @@ exports.getDashboardData = async (req, res) => {
       Income.find({ userId })
         .sort({ date: -1 })
         .limit(5)
-        .select('amount date source category')
+        .select('amount date source category icon')
         .lean(),
 
       // Recent Expense (latest 5)
       Expense.find({ userId })
         .sort({ date: -1 })
         .limit(5)
-        .select('amount date category')
+        .select('amount date category icon')
         .lean(),
 
       // Current Month Income
