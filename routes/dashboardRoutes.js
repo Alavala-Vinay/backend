@@ -1,8 +1,10 @@
-const express = require('express');
-const {protect} = require('../middleware/authMiddleware.js');
-const {getDashboardData} = require('../controllers/dashboardController.js');
+const express = require("express");
 const dashboardRouter = express.Router();
 
-dashboardRouter.get('/', protect, getDashboardData);
+const { protect } = require("../middleware/authMiddleware.js");
+const { getDashboardData } = require("../controllers/dashboardController.js");
+
+// --- Dashboard Route ---
+dashboardRouter.get("/", protect, getDashboardData);
 
 module.exports = dashboardRouter;
