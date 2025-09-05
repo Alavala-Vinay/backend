@@ -173,6 +173,10 @@ exports.addParticipants = async (req, res) => {
     const trip = await Trip.findById(req.params.tripId);
     if (!trip) return res.status(404).json({ message: "Trip not found" });
 
+      if(trip.visibility === "private" && emails && emails.length > 0) {
+        return res.status(400).json({ message: "Cannot add participants to a private trip" });
+      }
+
     if (!isCreator(trip, req.user._id)) {
       return res
         .status(403)
