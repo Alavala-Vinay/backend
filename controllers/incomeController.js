@@ -49,36 +49,37 @@ exports.addIncome = async (req, res) => {
 // =======================
 exports.getIncomesByDate = async (req, res) => {
   try {
-    const { page = 1, limit = 1, date } = req.query;
+    const { page = 1, limit = 1, date, tripId } = req.query;
 
-    // ✅ Default to today if no date
     let start, end;
     if (date) {
       start = new Date(date);
-    } else {
-      start = new Date();
+      start.setHours(0, 0, 0, 0);
+      end = new Date(date);
+      end.setHours(23, 59, 59, 999);
     }
-    start.setHours(0, 0, 0, 0);
 
-    end = new Date(start);
-    end.setHours(23, 59, 59, 999);
+    const matchStage = {
+      userId: new mongoose.Types.ObjectId(req.user.id),
+    };
 
-    const userObjectId = new mongoose.Types.ObjectId(req.user.id);
+    if (tripId) {
+      matchStage.tripId = new mongoose.Types.ObjectId(tripId);
+    }
+
+    if (date) {
+      matchStage.date = { $gte: start, $lte: end };
+    }
 
     const grouped = await Income.aggregate([
-      {
-        $match: {
-          userId: userObjectId,
-          date: { $gte: start, $lte: end },
-        },
-      },
+      { $match: matchStage },
       {
         $group: {
           _id: { $dateToString: { format: "%Y-%m-%d", date: "$date" } },
-          incomes: { $push: "$$ROOT" },
-        },
+          incomes: { $push: "$$ROOT" }
+        }
       },
-      { $sort: { _id: -1 } },
+      { $sort: { "_id": -1 } }
     ]);
 
     const totalPages = grouped.length || 1;
@@ -96,7 +97,6 @@ exports.getIncomesByDate = async (req, res) => {
     return res.status(500).json({ success: false, message: "Server error" });
   }
 };
-
 
 // =======================
 // ✅ Delete Income (secured by userId)
