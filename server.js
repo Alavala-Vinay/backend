@@ -31,7 +31,7 @@ app.use(helmet()); // Secure headers
 app.use(compression()); // Gzip compression for smaller payloads
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || "http://localhost:5173",
+    origin: process.env.FRONTEND_URL || "https://expensia.vercel.app",
     credentials: true,
   })
 );
@@ -74,7 +74,7 @@ app.use("/api/v1/trips", tripRoutes);
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // --- Socket.IO ---
-const allowedOrigin = process.env.FRONTEND_URL || "http://localhost:5173";
+const allowedOrigin = process.env.FRONTEND_URL || "https://expensia.vercel.app";
 const io = new SocketIOServer(server, {
   cors: { origin: allowedOrigin, methods: ["GET", "POST"] },
 });
