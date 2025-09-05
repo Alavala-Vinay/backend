@@ -177,10 +177,16 @@ exports.addParticipants = async (req, res) => {
         return res.status(400).json({ message: "Cannot add participants to a private trip" });
       }
 
+    
+
     if (!isCreator(trip, req.user._id)) {
       return res
         .status(403)
         .json({ message: "Only the creator can add participants" });
+    }
+
+    if(emails.map(e => e.toLowerCase()).includes(req.user.email.toLowerCase())) {
+      return res.status(400).json({ message: "Creator is already a participant" });
     }
 
     // find users by emails
@@ -258,6 +264,35 @@ exports.addPlace = async (req, res) => {
   } catch (err) {
     console.error("addPlace error:", err);
     res.status(500).json({ message: "Server error" });
+  }
+};
+
+exports.updatePlace = async (req, res) => {
+  try {
+    const { tripId, placeId } = req.params;
+    const { name, location, plannedCost, notes } = req.body;
+
+    const trip = await Trip.findById(tripId);
+    if (!trip) return res.status(404).json({ message: "Trip not found" });
+
+    if (!isCreator(trip, req.user._id)) {
+      return res.status(403).json({ message: "Only creator can update places" });
+    }
+
+    const place = trip.places.id(placeId);
+    if (!place) return res.status(404).json({ message: "Place not found" });
+
+    if (name !== undefined) place.name = name;
+    if (location !== undefined) place.location = location;
+    if (plannedCost !== undefined) place.plannedCost = plannedCost;
+    if (notes !== undefined) place.notes = notes;
+
+    await trip.save();
+
+    res.json({ message: "Place updated successfully", data: place });
+  } catch (error) {
+    console.error("Error in updatePlace:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
   }
 };
 
