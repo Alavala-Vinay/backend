@@ -2,12 +2,13 @@ const express = require("express");
 const authRouter = express.Router();
 
 const { protect } = require("../middleware/authMiddleware.js");
-const { registerUser, loginUser, getUserInfo } = require("../controllers/authController.js");
+const { registerUser, loginUser, getUserInfo, googleAuth } = require("../controllers/authController.js");
 const upload = require("../middleware/uploadMiddleware.js");
 
 // --- Auth Routes ---
 authRouter.post("/register", registerUser);
 authRouter.post("/login", loginUser);
+authRouter.post("/google", googleAuth);
 authRouter.get("/me", protect, getUserInfo);
 
 // --- Upload Profile Image ---
