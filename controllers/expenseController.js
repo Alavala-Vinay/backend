@@ -6,7 +6,7 @@ const xlsx = require('xlsx');
 // =======================
 exports.addExpense = async (req, res) => {
   try {
-    const { icon, description, category, amount } = req.body;
+    const { icon, description, category, amount, date } = req.body;
 
     if (!icon || !category || !amount || !date) {
       return res.status(400).json({ success: false, message: "All fields are required" });
