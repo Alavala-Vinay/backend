@@ -106,6 +106,7 @@ exports.addExpenseToTrip = async (req, res) => {
 
     const expense = await Expense.create({
       userId: req.user.id,
+      tripId: trip._id,
       category,
       amount,
       date,
@@ -146,6 +147,7 @@ exports.addIncomeToTrip = async (req, res) => {
 
     const income = await Income.create({
       userId: req.user.id,
+      tripId: trip._id,
       source,
       amount,
       date,
