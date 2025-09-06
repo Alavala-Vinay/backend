@@ -1,7 +1,7 @@
 const jwt = require("jsonwebtoken");
 const User = require("../models/User.js");
-const { JWT_SECRET, JWT_EXPIRATION } = process.env;
-
+const { OAuth2Client } = require("google-auth-library");
+const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 // Generate JWT
 
 const generateToken = (userId) => {
@@ -17,6 +17,47 @@ const sanitizeUser = (user) => ({
   email: user.email,
   profileImageUrl: user.profileImageUrl,
 });
+
+// Google login/signup
+exports.googleAuth = async (req, res) => {
+  try {
+    const { token } = req.body;
+    const ticket = await client.verifyIdToken({
+      idToken: token,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+    const payload = ticket.getPayload();
+    const { email, name, picture } = payload;
+
+    let user = await User.findOne({ email });
+    if (!user) {
+      user = await User.create({
+        fullName: name,
+        email,
+        profileImageUrl: picture,
+        password: Math.random().toString(36).slice(-8), // random password
+      });
+    }
+
+    res.json({
+      success: true,
+      message: "Google login successful",
+      user: {
+        id: user._id,
+        fullName: user.fullName,
+        email: user.email,
+        profileImageUrl: user.profileImageUrl,
+      },
+      token: jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
+        expiresIn: "7d",
+      }),
+    });
+  } catch (err) {
+    console.error("Google Auth Error:", err);
+    res.status(401).json({ success: false, error: "Google authentication failed" });
+  }
+};
+
 
 // =============================
 // Register a new user
