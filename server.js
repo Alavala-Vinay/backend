@@ -7,7 +7,6 @@ const jwt = require("jsonwebtoken");
 const helmet = require("helmet");
 const compression = require("compression");
 const rateLimit = require("express-rate-limit");
-
 dotenv.config();
 
 const { Server: SocketIOServer } = require("socket.io");
@@ -31,7 +30,7 @@ app.use(helmet()); // Secure headers
 app.use(compression()); // Gzip compression for smaller payloads
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || "https://expensia-xi.vercel.app",
+    origin: process.env.FRONTEND_URL || "http://localhost:5173",
     credentials: true,
   })
 );
@@ -56,7 +55,7 @@ app.use("/api", (req, res, next) => {
 });
 
 // --- Body parsing ---
-app.use(express.json({ limit: "30mb" }));
+app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 
 // --- DB ---
@@ -74,7 +73,7 @@ app.use("/api/v1/trips", tripRoutes);
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // --- Socket.IO ---
-const allowedOrigin = process.env.FRONTEND_URL || "https://expensia-xi.vercel.app";
+const allowedOrigin = process.env.FRONTEND_URL || "http://localhost:5173";
 const io = new SocketIOServer(server, {
   cors: { origin: allowedOrigin, methods: ["GET", "POST"] },
 });
@@ -127,26 +126,36 @@ io.on("connection", (socket) => {
   });
 
   // Handle messages
-  socket.on("trip-message", async ({ tripId, message }) => {
-    if (!tripId || !message) return;
+  // Handle messages
+socket.on("trip-message", async ({ tripId, message }) => {
+  if (!tripId || !message) return;
 
-    try {
-      // Save message to DB
-      const msg = await TripMessage.create({
-        trip: tripId,
-        user: socket.user.id,
-        message,
-      });
+  try {
+    // Save message to DB
+    const msg = await TripMessage.create({
+      trip: tripId,
+      user: socket.user.id,
+      message,
+    });
 
-      const populated = await msg.populate("user", "fullName email");
+    const populated = await msg.populate("user", "fullName email");
 
-      // Broadcast to room
-      io.to(`trip:${tripId}`).emit("trip-message", populated);
-    } catch (err) {
-      console.error("Trip message error:", err);
-      socket.emit("error", "Message not sent");
-    }
-  });
+    // Broadcast chat message
+    io.to(`trip:${tripId}`).emit("trip-message", populated);
+
+    // 🔔 Also broadcast as notification
+    io.to(`trip:${tripId}`).emit("trip-notification", {
+      type: "message",
+      tripId,
+      data: populated,
+      message: `${populated.user.fullName}: ${populated.message}`
+    });
+  } catch (err) {
+    console.error("Trip message error:", err);
+    socket.emit("error", "Message not sent");
+  }
+});
+
 
   socket.on("disconnect", () => {
     console.log(`❌ User disconnected: ${socket.user.id}`);
