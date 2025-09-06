@@ -16,12 +16,18 @@ exports.addExpense = async (req, res) => {
       return res.status(400).json({ success: false, message: "Amount must be greater than 0" });
     }
 
+    const parsedDate = new Date(date);
+    if (isNaN(parsedDate)) {
+      return res.status(400).json({ success: false, message: 'Invalid date format' });
+    }
+
     const expense = new Expense({
       userId: req.user.id, // ✅ consistent
       icon,
       description,
       category,
       amount,
+      date: parsedDate
     });
 
     await expense.save();
