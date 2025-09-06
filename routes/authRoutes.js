@@ -11,7 +11,7 @@ authRouter.post("/login", loginUser);
 authRouter.get("/me", protect, getUserInfo);
 
 // --- Upload Profile Image ---
-authRouter.post("/upload-image", protect, upload.single("image"), async (req, res) => {
+authRouter.post("/upload-image", upload.single("image"), async (req, res) => {
   try {
     if (!req.file || !req.file.path) {
       return res.status(400).json({ error: "No image uploaded" });
