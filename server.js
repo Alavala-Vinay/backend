@@ -35,6 +35,10 @@ app.use(
   })
 );
 
+// Add this *before* express-rate-limit middleware
+app.set("trust proxy", 1);
+
+
 // ✅ Rate limiting to protect API
 app.use(
   "/api",
