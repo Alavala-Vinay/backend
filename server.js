@@ -6,7 +6,6 @@ const http = require("http");
 const jwt = require("jsonwebtoken");
 const helmet = require("helmet");
 const compression = require("compression");
-const rateLimit = require("express-rate-limit");
 dotenv.config();
 
 const { Server: SocketIOServer } = require("socket.io");
@@ -37,18 +36,6 @@ app.use(
 
 // Add this *before* express-rate-limit middleware
 app.set("trust proxy", 1);
-
-
-// ✅ Rate limiting to protect API
-app.use(
-  "/api",
-  rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100, // limit each IP
-    standardHeaders: true,
-    legacyHeaders: false,
-  })
-);
 
 // --- Disable caching for APIs (fix 304 issue) ---
 app.use("/api", (req, res, next) => {
