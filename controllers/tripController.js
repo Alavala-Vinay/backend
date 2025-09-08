@@ -104,6 +104,14 @@ exports.addExpenseToTrip = async (req, res) => {
       return res.status(403).json({ message: "Access denied" });
     }
 
+    if(!icon) {
+      icon = "💸";
+    }
+
+    if(!category || !amount || !date ) {
+      return res.status(400).json({ message: "category, amount and date are required" });
+    }
+
     const expense = await Expense.create({
       userId: req.user.id,
       tripId: trip._id,
@@ -140,6 +148,14 @@ exports.addIncomeToTrip = async (req, res) => {
     const { source, amount, date, description, icon } = req.body;
     const trip = await Trip.findById(req.params.id);
     if (!trip) return res.status(404).json({ message: "Trip not found" });
+
+    if (!icon) {
+      icon = "💰";
+    }
+
+    if(!source || !amount || !date) {
+      return res.status(400).json({ message: "source, amount and date are required" });
+    }
 
     if (!isCreator(trip, req.user._id) && !isParticipant(trip, req.user._id)) {
       return res.status(403).json({ message: "Access denied" });
