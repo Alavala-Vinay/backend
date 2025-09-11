@@ -1,5 +1,6 @@
 const dotenv = require("dotenv");
 const express = require("express");
+const cron = require("node-cron");
 const cors = require("cors");
 const path = require("path");
 const http = require("http");
@@ -18,26 +19,28 @@ const tripRoutes = require("./routes/tripRoutes.js");
 
 const Trip = require("./models/Trip.js");
 const TripMessage = require("./models/TripMessage.js");
-const User = require("./models/User.js");
 const { connectDB } = require("./config/db.js");
+const recurringPaymentRoutes = require("./routes/recurringPaymentRoutes.js");
+const SubscriptionDashboardRoutes = require("./routes/subscriptionDashboardRoutes.js");
+
+// Import recurring payment controller
+const { generateExpenses } = require("./controllers/RecurringPaymentController.js");
 
 const app = express();
 const server = http.createServer(app);
 
 // --- Security + Performance ---
-app.use(helmet()); // Secure headers
-app.use(compression()); // Gzip compression for smaller payloads
+app.use(helmet());
+app.use(compression());
 app.use(
   cors({
     origin: process.env.FRONTEND_URL || "http://localhost:5173",
     credentials: true,
   })
 );
-
-// Add this *before* express-rate-limit middleware
 app.set("trust proxy", 1);
 
-// --- Disable caching for APIs (fix 304 issue) ---
+// --- Disable caching for APIs ---
 app.use("/api", (req, res, next) => {
   res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
   res.set("Pragma", "no-cache");
@@ -54,12 +57,13 @@ connectDB();
 
 // --- Routes ---
 app.get("/", (req, res) => res.send("API is running..."));
-
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/income", incomeRoutes);
 app.use("/api/v1/expense", expenseRoutes);
 app.use("/api/v1/dashboard", dashboardRoutes);
 app.use("/api/v1/trips", tripRoutes);
+app.use("/api/v1/recurring-payments", recurringPaymentRoutes);
+app.use("/api/v1/subscriptions", SubscriptionDashboardRoutes);
 
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
@@ -68,11 +72,8 @@ const allowedOrigin = process.env.FRONTEND_URL || "http://localhost:5173";
 const io = new SocketIOServer(server, {
   cors: { origin: allowedOrigin, methods: ["GET", "POST"] },
 });
-
-// ✅ Make io available inside controllers
 app.set("io", io);
 
-// --- Middleware: Verify JWT ---
 io.use((socket, next) => {
   const token =
     socket.handshake.auth?.token ||
@@ -90,11 +91,9 @@ io.use((socket, next) => {
   }
 });
 
-// --- Socket.IO Events ---
 io.on("connection", (socket) => {
   console.log(`✅ User connected: ${socket.user.id}`);
 
-  // Join trip room
   socket.on("join-trip", async (tripId) => {
     try {
       const trip = await Trip.findById(tripId).select("userId participants visibility");
@@ -116,45 +115,60 @@ io.on("connection", (socket) => {
     }
   });
 
-  // Handle messages
-  // Handle messages
-socket.on("trip-message", async ({ tripId, message }) => {
-  if (!tripId || !message) return;
+  socket.on("trip-message", async ({ tripId, message }) => {
+    if (!tripId || !message) return;
 
-  try {
-    // Save message to DB
-    const msg = await TripMessage.create({
-      trip: tripId,
-      user: socket.user.id,
-      message,
-    });
+    try {
+      const msg = await TripMessage.create({
+        trip: tripId,
+        user: socket.user.id,
+        message,
+      });
 
-    const populated = await msg.populate("user", "fullName email");
+      const populated = await msg.populate("user", "fullName email");
 
-    // Broadcast chat message
-    io.to(`trip:${tripId}`).emit("trip-message", populated);
+      io.to(`trip:${tripId}`).emit("trip-message", populated);
 
-    // 🔔 Also broadcast as notification
-    io.to(`trip:${tripId}`).emit("trip-notification", {
-      type: "message",
-      tripId,
-      data: populated,
-      message: `${populated.user.fullName}: ${populated.message}`
-    });
-  } catch (err) {
-    console.error("Trip message error:", err);
-    socket.emit("error", "Message not sent");
-  }
-});
-
+      io.to(`trip:${tripId}`).emit("trip-notification", {
+        type: "message",
+        tripId,
+        data: populated,
+        message: `${populated.user.fullName}: ${populated.message}`,
+      });
+    } catch (err) {
+      console.error("Trip message error:", err);
+      socket.emit("error", "Message not sent");
+    }
+  });
 
   socket.on("disconnect", () => {
-    console.log(`❌ User disconnected: ${socket.user.id}`);
+    console.log(`User disconnected: ${socket.user.id}`);
   });
 });
+
+// --- Cron Job: run daily at 3:30 PM IST ---
+const cronExpression = "38 17 * * *";
+
+cron.schedule(
+  cronExpression,
+  async () => {
+    console.log("🚀 [CRON] Triggered at", new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }));
+    try {
+      await generateExpenses();
+      console.log("[CRON] generateExpenses() completed successfully.");
+    } catch (err) {
+      console.error("CRON] Error running generateExpenses:", err.message);
+    }
+  },
+  {
+    scheduled: true,
+    timezone: "Asia/Kolkata",
+  }
+);
 
 // --- Start server ---
 const PORT = process.env.PORT || 4000;
 server.listen(PORT, () => {
   console.log(`🚀 Server is running on http://localhost:${PORT}`);
+  console.log(`📅 [CRON] Job scheduled daily at 3:30 PM IST`);
 });
