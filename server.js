@@ -146,8 +146,8 @@ io.on("connection", (socket) => {
   });
 });
 
-// --- Cron Job: run daily at 3:30 PM IST ---
-const cronExpression = "38 17 * * *";
+// --- Cron Job: run daily at 8:30 AM IST ---
+const cronExpression = "30 8 * * *";
 
 cron.schedule(
   cronExpression,
@@ -170,5 +170,5 @@ cron.schedule(
 const PORT = process.env.PORT || 4000;
 server.listen(PORT, () => {
   console.log(`🚀 Server is running on http://localhost:${PORT}`);
-  console.log(`📅 [CRON] Job scheduled daily at 3:30 PM IST`);
+  console.log(`📅 [CRON] Job scheduled daily at 8:30 AM IST`);
 });
