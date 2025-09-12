@@ -102,34 +102,34 @@ exports.loginUser = async (req, res) => {
     const { email, password } = req.body;
 
     if (!email || !password) {
-      return res.status(400).json({ success: false, error: "Please fill in all fields" });
+      return res.status(400).json({ success: false, error: "Missing fields" });
     }
 
-    // ✅ Fetch with password explicitly
-    const user = await User.findOne({ email }).select("+password");
-    if (!user) {
-      return res.status(400).json({ success: false, error: "Invalid credentials" });
-    }
+    // ✅ Projection only necessary fields
+    const user = await User.findOne({ email }, "fullName email password profileImageUrl").lean();
+    if (!user) return res.status(400).json({ success: false, error: "Invalid credentials" });
 
-    // ✅ Argon2 password verification
-    const isMatch = await user.comparePassword(password);
-    if (!isMatch) {
-      return res.status(400).json({ success: false, error: "Invalid credentials" });
-    }
+    // ✅ Password check (argon2 fast settings)
+    const isMatch = await argon2.verify(user.password, password, { timeCost: 2, memoryCost: 1024 });
+    if (!isMatch) return res.status(400).json({ success: false, error: "Invalid credentials" });
 
-    const jwtToken = await generateToken(user._id);
+    // ✅ Async token + background logging
+    const [token] = await Promise.all([
+      generateToken(user._id),
+      logLoginAttempt(user._id) // background
+    ]);
 
-    res.status(200).json({
+    res.json({
       success: true,
-      message: "Login successful",
-      user: sanitizeUser(user),
-      token: jwtToken,
+      user: { id: user._id, fullName: user.fullName, email: user.email, profileImageUrl: user.profileImageUrl },
+      token
     });
   } catch (err) {
     console.error("Login Error:", err);
-    res.status(500).json({ success: false, error: "Internal server error" });
+    res.status(500).json({ success: false, error: "Server error" });
   }
 };
+
 
 // =============================
 // Get user info
