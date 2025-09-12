@@ -1,16 +1,17 @@
 const jwt = require("jsonwebtoken");
+const { promisify } = require("util");
+const jwtSign = promisify(jwt.sign);
+
 const User = require("../models/User.js");
 const { OAuth2Client } = require("google-auth-library");
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
-// Generate JWT
 
+// Generate JWT (async + fast)
 const generateToken = (userId) => {
-  return jwt.sign({ id: userId }, process.env.JWT_SECRET, {
-    expiresIn: "7d",
-  });
+  return jwtSign({ id: userId }, process.env.JWT_SECRET, { expiresIn: "7d" });
 };
 
-// Helper: pick safe user fields
+// Sanitize user object (safe fields only)
 const sanitizeUser = (user) => ({
   id: user._id,
   fullName: user.fullName,
@@ -18,39 +19,40 @@ const sanitizeUser = (user) => ({
   profileImageUrl: user.profileImageUrl,
 });
 
+// =============================
 // Google login/signup
+// =============================
 exports.googleAuth = async (req, res) => {
   try {
     const { token } = req.body;
+
+    // ✅ Verify once against Google
     const ticket = await client.verifyIdToken({
       idToken: token,
       audience: process.env.GOOGLE_CLIENT_ID,
     });
-    const payload = ticket.getPayload();
-    const { email, name, picture } = payload;
 
-    let user = await User.findOne({ email });
+    const { email, name, picture } = ticket.getPayload();
+
+    // ✅ Use lean() for faster lookup
+    let user = await User.findOne({ email }).lean();
+
     if (!user) {
       user = await User.create({
         fullName: name,
         email,
         profileImageUrl: picture,
-        password: Math.random().toString(36).slice(-8), // random password
+        password: Math.random().toString(36).slice(-8), // random temp password
       });
     }
+
+    const jwtToken = await generateToken(user._id);
 
     res.json({
       success: true,
       message: "Google login successful",
-      user: {
-        id: user._id,
-        fullName: user.fullName,
-        email: user.email,
-        profileImageUrl: user.profileImageUrl,
-      },
-      token: jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
-        expiresIn: "7d",
-      }),
+      user: sanitizeUser(user),
+      token: jwtToken,
     });
   } catch (err) {
     console.error("Google Auth Error:", err);
@@ -58,136 +60,111 @@ exports.googleAuth = async (req, res) => {
   }
 };
 
-
 // =============================
-// Register a new user
+// Register user
 // =============================
 exports.registerUser = async (req, res) => {
-  const { fullName, email, password, profileImageUrl } = req.body;
-
   try {
+    const { fullName, email, password, profileImageUrl } = req.body;
+
     if (!fullName || !email || !password) {
-      return res
-        .status(400)
-        .json({ success: false, error: "Please fill in all fields" });
+      return res.status(400).json({ success: false, error: "Please fill in all fields" });
     }
 
-    // Check if user exists (lean for performance)
+    // ✅ Fast lookup with lean
     const existingUser = await User.findOne({ email }).lean();
     if (existingUser) {
-      return res
-        .status(400)
-        .json({ success: false, error: "User already exists" });
+      return res.status(400).json({ success: false, error: "User already exists" });
     }
 
-    // Create user
-    const user = await User.create({
-      fullName,
-      email,
-      password, // hashed in User model pre-save hook
-      profileImageUrl,
-    });
+    // ✅ Create user (argon2 hash handled in pre-save)
+    const user = await User.create({ fullName, email, password, profileImageUrl });
+
+    const jwtToken = await generateToken(user._id);
 
     res.status(201).json({
       success: true,
       message: "User registered successfully",
       user: sanitizeUser(user),
-      token: generateToken(user._id),
+      token: jwtToken,
     });
-  } catch (error) {
-    console.error("Error registering user:", error);
+  } catch (err) {
+    console.error("Register Error:", err);
     res.status(500).json({ success: false, error: "Internal server error" });
   }
 };
 
 // =============================
-// Login a user
+// Login user
 // =============================
 exports.loginUser = async (req, res) => {
-  const { email, password } = req.body;
-
   try {
+    const { email, password } = req.body;
+
     if (!email || !password) {
       return res.status(400).json({ success: false, error: "Please fill in all fields" });
     }
 
-    // ensure email index is used
+    // ✅ Fetch with password explicitly
     const user = await User.findOne({ email }).select("+password");
     if (!user) {
       return res.status(400).json({ success: false, error: "Invalid credentials" });
     }
 
-    // fast bcrypt compare
+    // ✅ Argon2 password verification
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
       return res.status(400).json({ success: false, error: "Invalid credentials" });
     }
 
-    // async jwt signing (non-blocking)
-    const token = await new Promise((resolve, reject) => {
-      jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: "7d" }, (err, token) => {
-        if (err) reject(err);
-        resolve(token);
-      });
-    });
+    const jwtToken = await generateToken(user._id);
 
     res.status(200).json({
       success: true,
-      message: "User logged in successfully",
+      message: "Login successful",
       user: sanitizeUser(user),
-      token,
+      token: jwtToken,
     });
-  } catch (error) {
-    console.error("Error logging in user:", error);
+  } catch (err) {
+    console.error("Login Error:", err);
     res.status(500).json({ success: false, error: "Internal server error" });
   }
 };
 
-
-
 // =============================
-// Get user information
+// Get user info
 // =============================
 exports.getUserInfo = async (req, res) => {
   try {
-    // Use lean() for performance, exclude password
-    const user = await User.findById(req.user.id)
-      .select("-password")
-      .lean();
+    const user = await User.findById(req.user.id).select("-password").lean();
 
     if (!user) {
       return res.status(404).json({ success: false, error: "User not found" });
     }
 
-    res
-      .status(200)
-      .json({ success: true, message: "User info retrieved", user });
-  } catch (error) {
-    console.error("Error fetching user info:", error);
+    res.json({ success: true, user });
+  } catch (err) {
+    console.error("GetUserInfo Error:", err);
     res.status(500).json({ success: false, error: "Internal server error" });
   }
 };
 
+// =============================
+// Update user info
+// =============================
 exports.updateUserInfo = async (req, res) => {
   try {
     const { fullName, phone, profileImageUrl, currentPassword, newPassword } = req.body;
 
-    const updateData = { fullName, phone, profileImageUrl };
-
     if (currentPassword && newPassword) {
-      // Get user with password
       const user = await User.findById(req.user.id).select("+password");
-      if (!user) {
-        return res.status(404).json({ success: false, error: "User not found" });
-      }
+      if (!user) return res.status(404).json({ success: false, error: "User not found" });
 
-      // Verify current password
       const isMatch = await user.comparePassword(currentPassword);
       if (!isMatch) {
-        return res.status(400).json({ success: false, error: "Current password is incorrect" });
+        return res.status(400).json({ success: false, error: "Current password incorrect" });
       }
 
-      // Set new password (will be hashed by pre-save hook)
       user.password = newPassword;
       if (fullName) user.fullName = fullName;
       if (phone) user.phone = phone;
@@ -195,22 +172,19 @@ exports.updateUserInfo = async (req, res) => {
 
       await user.save();
 
-      return res.status(200).json({
-        success: true,
-        message: "Password updated successfully",
-        user: user.toJSON(),
-      });
+      return res.json({ success: true, message: "Password updated", user: sanitizeUser(user) });
     }
 
-    // Normal profile update (without password)
-    const updatedUser = await User.findByIdAndUpdate(req.user.id, updateData, {
-      new: true,
-      runValidators: true,
-    }).select("-password");
+    // ✅ Partial update without password
+    const updatedUser = await User.findByIdAndUpdate(
+      req.user.id,
+      { fullName, phone, profileImageUrl },
+      { new: true, runValidators: true, projection: "-password" }
+    ).lean();
 
-    res.status(200).json({ success: true, message: "User updated", user: updatedUser });
-  } catch (error) {
-    console.error("Error updating user info:", error);
+    res.json({ success: true, message: "User updated", user: updatedUser });
+  } catch (err) {
+    console.error("UpdateUserInfo Error:", err);
     res.status(500).json({ success: false, error: "Internal server error" });
   }
 };
