@@ -111,28 +111,38 @@ exports.loginUser = async (req, res) => {
       return res.status(400).json({ success: false, error: "Please fill in all fields" });
     }
 
-    // explicitly select password for comparison
+    // ensure email index is used
     const user = await User.findOne({ email }).select("+password");
     if (!user) {
       return res.status(400).json({ success: false, error: "Invalid credentials" });
     }
 
+    // fast bcrypt compare
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
       return res.status(400).json({ success: false, error: "Invalid credentials" });
     }
 
+    // async jwt signing (non-blocking)
+    const token = await new Promise((resolve, reject) => {
+      jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: "7d" }, (err, token) => {
+        if (err) reject(err);
+        resolve(token);
+      });
+    });
+
     res.status(200).json({
       success: true,
       message: "User logged in successfully",
-      user: user.toJSON(), // safe JSON (password excluded)
-      token: generateToken(user._id),
+      user: sanitizeUser(user),
+      token,
     });
   } catch (error) {
     console.error("Error logging in user:", error);
     res.status(500).json({ success: false, error: "Internal server error" });
   }
 };
+
 
 
 // =============================
@@ -154,6 +164,53 @@ exports.getUserInfo = async (req, res) => {
       .json({ success: true, message: "User info retrieved", user });
   } catch (error) {
     console.error("Error fetching user info:", error);
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
+};
+
+exports.updateUserInfo = async (req, res) => {
+  try {
+    const { fullName, phone, profileImageUrl, currentPassword, newPassword } = req.body;
+
+    const updateData = { fullName, phone, profileImageUrl };
+
+    if (currentPassword && newPassword) {
+      // Get user with password
+      const user = await User.findById(req.user.id).select("+password");
+      if (!user) {
+        return res.status(404).json({ success: false, error: "User not found" });
+      }
+
+      // Verify current password
+      const isMatch = await user.comparePassword(currentPassword);
+      if (!isMatch) {
+        return res.status(400).json({ success: false, error: "Current password is incorrect" });
+      }
+
+      // Set new password (will be hashed by pre-save hook)
+      user.password = newPassword;
+      if (fullName) user.fullName = fullName;
+      if (phone) user.phone = phone;
+      if (profileImageUrl) user.profileImageUrl = profileImageUrl;
+
+      await user.save();
+
+      return res.status(200).json({
+        success: true,
+        message: "Password updated successfully",
+        user: user.toJSON(),
+      });
+    }
+
+    // Normal profile update (without password)
+    const updatedUser = await User.findByIdAndUpdate(req.user.id, updateData, {
+      new: true,
+      runValidators: true,
+    }).select("-password");
+
+    res.status(200).json({ success: true, message: "User updated", user: updatedUser });
+  } catch (error) {
+    console.error("Error updating user info:", error);
     res.status(500).json({ success: false, error: "Internal server error" });
   }
 };
