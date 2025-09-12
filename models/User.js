@@ -1,53 +1,38 @@
 const mongoose = require('mongoose');
-const bcrypt = require('bcrypt');
+const argon2 = require('argon2');
 
 const userSchema = new mongoose.Schema({
-  fullName: {
-    type: String,
-    required: true,
-    trim: true,
-    index: true
-  },
-  email: {
-    type: String,
-    required: true,
-    unique: true,
-    lowercase: true,
-    index: true
-  },
-  password: {
-    type: String,
-    required: true,
-    select: false
-  },
-  profileImageUrl: {
-    type: String,
-    default: null
-  }
+  fullName: { type: String, required: true, trim: true, index: true },
+  email: { type: String, required: true, unique: true, lowercase: true, index: true },
+  password: { type: String, required: true, select: false },
+  profileImageUrl: { type: String, default: null }
 }, { timestamps: true });
 
-// ✅ Hash password before saving
-userSchema.pre('save', async function(next) {
+// ⚡ Argon2 hashing
+userSchema.pre('save', async function (next) {
   if (!this.isModified('password')) return next();
-  try {
-    const salt = await bcrypt.genSalt(10); // ⚡ faster but still secure
-    this.password = await bcrypt.hash(this.password, salt);
-    next();
-  } catch (error) {
-    next(error);
-  }
+  this.password = await argon2.hash(this.password, {
+    type: argon2.argon2id,
+    memoryCost: 2 ** 16,
+    parallelism: 1,
+    timeCost: 3
+  });
+  next();
 });
 
-// ✅ Compare password safely
-userSchema.methods.comparePassword = function(candidatePassword) {
-  return bcrypt.compare(candidatePassword, this.password);
+// ⚡ Compare password
+userSchema.methods.comparePassword = function (candidatePassword) {
+  return argon2.verify(this.password, candidatePassword);
 };
 
-// ✅ Virtual: safe JSON (no password)
-userSchema.methods.toJSON = function() {
+// ⚡ Safe JSON
+userSchema.methods.toJSON = function () {
   const obj = this.toObject();
   delete obj.password;
   return obj;
 };
+
+// ⚡ Extra index for login lookups
+userSchema.index({ email: 1, password: 1 });
 
 module.exports = mongoose.model('User', userSchema);
