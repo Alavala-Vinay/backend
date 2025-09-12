@@ -100,28 +100,25 @@ exports.registerUser = async (req, res) => {
 exports.loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
-
     if (!email || !password) {
       return res.status(400).json({ success: false, error: "Missing fields" });
     }
 
-    // ✅ Projection only necessary fields
-    const user = await User.findOne({ email }, "fullName email password profileImageUrl").lean();
+    // ✅ fetch with password for argon2 verify
+    const user = await User.findOne({ email }).select("+password");
     if (!user) return res.status(400).json({ success: false, error: "Invalid credentials" });
 
-    // ✅ Password check (argon2 fast settings)
-    const isMatch = await argon2.verify(user.password, password, { timeCost: 2, memoryCost: 1024 });
+    // ✅ argon2 verify
+    const isMatch = await argon2.verify(user.password, password);
     if (!isMatch) return res.status(400).json({ success: false, error: "Invalid credentials" });
 
-    // ✅ Async token + background logging
-    const [token] = await Promise.all([
-      generateToken(user._id),
-      logLoginAttempt(user._id) // background
-    ]);
+    // ✅ async JWT
+    const token = await generateToken(user._id);
 
     res.json({
       success: true,
-      user: { id: user._id, fullName: user.fullName, email: user.email, profileImageUrl: user.profileImageUrl },
+      message: "Login successful",
+      user: sanitizeUser(user),
       token
     });
   } catch (err) {
