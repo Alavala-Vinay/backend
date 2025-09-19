@@ -34,7 +34,7 @@ app.use(helmet());
 app.use(compression());
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || "https://expensia-xi.vercel.app",
+    origin: process.env.FRONTEND_URL || "https://expensia-xi.vercel.app" || "https://expensia.vercel.app",
     credentials: true,
   })
 );
@@ -68,7 +68,7 @@ app.use("/api/v1/subscriptions", SubscriptionDashboardRoutes);
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // --- Socket.IO ---
-const allowedOrigin = process.env.FRONTEND_URL || "https://expensia-xi.vercel.app";
+const allowedOrigin = process.env.FRONTEND_URL || "https://expensia-xi.vercel.app" || "https://expensia.vercel.app";
 const io = new SocketIOServer(server, {
   cors: { origin: allowedOrigin, methods: ["GET", "POST"] },
 });
