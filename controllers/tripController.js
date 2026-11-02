@@ -96,7 +96,7 @@ exports.getTripById = async (req, res) => {
 // Add Expense
 exports.addExpenseToTrip = async (req, res) => {
   try {
-    const { category, amount, date, description, icon } = req.body;
+    const { category, amount, date, description, icon = "💸" } = req.body;
     const trip = await Trip.findById(req.params.id);
     if (!trip) return res.status(404).json({ message: "Trip not found" });
 
@@ -104,9 +104,6 @@ exports.addExpenseToTrip = async (req, res) => {
       return res.status(403).json({ message: "Access denied" });
     }
 
-    if(!icon) {
-      icon = "💸";
-    }
 
     if(!category || !amount || !date ) {
       return res.status(400).json({ message: "category, amount and date are required" });
@@ -145,13 +142,10 @@ exports.addExpenseToTrip = async (req, res) => {
 // Add Income
 exports.addIncomeToTrip = async (req, res) => {
   try {
-    const { source, amount, date, description, icon } = req.body;
+    const { source, amount, date, description, icon = "💰" } = req.body;
     const trip = await Trip.findById(req.params.id);
     if (!trip) return res.status(404).json({ message: "Trip not found" });
 
-    if (!icon) {
-      icon = "💰";
-    }
 
     if(!source || !amount || !date) {
       return res.status(400).json({ message: "source, amount and date are required" });
@@ -423,7 +417,9 @@ exports.postMessage = async (req, res) => {
 
     const io = req.app.get("io");
     if (io) {
-      io.to(`trip:${req.params.tripId}`).emit("trip-message", msg);
+      io.to(`trip:${req.params.tripId}`)
+        .except(`user:${String(req.user._id)}`)
+        .emit("trip-message", msg);
       io.to(`trip:${req.params.tripId}`).emit("trip-notification", {
         type: "message",
         tripId: req.params.tripId,
