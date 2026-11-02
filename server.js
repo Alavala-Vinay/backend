@@ -93,6 +93,7 @@ io.use((socket, next) => {
 
 io.on("connection", (socket) => {
   console.log(`✅ User connected: ${socket.user.id}`);
+  socket.join(`user:${String(socket.user.id)}`);
 
   socket.on("join-trip", async (tripId) => {
     try {
@@ -127,7 +128,9 @@ io.on("connection", (socket) => {
 
       const populated = await msg.populate("user", "fullName email");
 
-      io.to(`trip:${tripId}`).emit("trip-message", populated);
+      io.to(`trip:${tripId}`)
+        .except(`user:${String(socket.user.id)}`)
+        .emit("trip-message", populated);
 
       io.to(`trip:${tripId}`).emit("trip-notification", {
         type: "message",
